@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三桿式深視力検査シミュレーター</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+            background-color: #f0f4f8;
+            color: #334155;
+            -webkit-font-smoothing: antialiased;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 400px;
+            background-color: #1e293b; /* 筐体色 */
+            border-radius: 0.75rem;
+            box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2);
+            border: 2px solid #cbd5e1;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+        ::-webkit-scrollbar { width: 0px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center py-8 px-4 sm:px-6">
+
+    <div class="w-full max-w-3xl bg-white rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8 space-y-6">
+        
+        <!-- ヘッダー -->
+        <header class="border-b border-slate-100 pb-4">
+            <h1 class="text-2xl sm:text-3xl font-bold text-slate-800 flex items-center gap-2 mb-2">
+                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                三桿式深視力検査
+            </h1>
+            <p class="text-sm text-slate-500 font-medium">検査距離 2.5m / 移動範囲 ±10cm / 桿間隔 3.0cm / 太さ 0.3cm</p>
+        </header>
+
+        <!-- ステータスバー -->
+        <div class="flex justify-between items-center">
+            <div class="bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-bold border border-blue-200 shadow-sm flex items-center gap-2">
+                <span id="speed-badge" class="w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse"></span>
+                <span id="speed-display">速度: 5.0 cm/s</span>
+            </div>
+            <span id="trial-badge" class="text-sm font-bold bg-slate-100 text-slate-600 px-4 py-2 rounded-full border border-slate-200">待機中</span>
+        </div>
+
+        <!-- メイン画面（被検者視点ビュー） -->
+        <div class="canvas-container relative">
+            <canvas id="frontCanvas"></canvas>
+        </div>
+
+        <!-- コントロール ＆ 結果エリア -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            
+            <!-- 操作パネル -->
+            <div class="flex flex-col gap-4">
+                <button id="stop-btn" class="w-full h-16 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl shadow-md transition-all transform active:scale-95 text-xl flex justify-center items-center gap-2 tracking-wider">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                    <span>ストップ（測定）</span>
+                </button>
+                <p class="text-xs text-center text-slate-400">※スペースキーまたはEnterキーでも停止可能です</p>
+
+                <div class="flex gap-3 mt-auto">
+                    <button id="toggle-speed-btn" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-medium py-3 rounded-xl text-sm transition-colors border border-slate-300 shadow-sm active:bg-slate-100">
+                        速度変更 (2.5cm/s)
+                    </button>
+                    <button id="reset-btn" class="flex-1 bg-white hover:bg-slate-50 text-slate-700 font-medium py-3 rounded-xl text-sm transition-colors border border-slate-300 shadow-sm active:bg-slate-100">
+                        リセット
+                    </button>
+                </div>
+            </div>
+
+            <!-- 結果パネル -->
+            <div class="bg-slate-50 rounded-xl border border-slate-200 p-5 flex flex-col">
+                <h2 class="text-sm font-bold text-slate-600 tracking-wider mb-3 border-b border-slate-200 pb-2">測定結果</h2>
+                
+                <div class="space-y-2 mb-4">
+                    <div class="flex justify-between items-center bg-white p-2.5 rounded border border-slate-100 shadow-sm">
+                        <span class="text-sm text-slate-500 font-medium">1回目誤差</span>
+                        <span id="val-1" class="font-mono font-bold text-slate-800">-- cm</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-white p-2.5 rounded border border-slate-100 shadow-sm">
+                        <span class="text-sm text-slate-500 font-medium">2回目誤差</span>
+                        <span id="val-2" class="font-mono font-bold text-slate-800">-- cm</span>
+                    </div>
+                    <div class="flex justify-between items-center bg-white p-2.5 rounded border border-slate-100 shadow-sm">
+                        <span class="text-sm text-slate-500 font-medium">3回目誤差</span>
+                        <span id="val-3" class="font-mono font-bold text-slate-800">-- cm</span>
+                    </div>
+                </div>
+
+                <div class="mt-auto bg-white rounded-lg p-4 border border-slate-200 text-center shadow-sm">
+                    <p class="text-xs text-slate-500 font-bold mb-1">3回平均誤差（2.0cm以下で合格）</p>
+                    <p id="val-avg" class="font-mono text-3xl font-extrabold text-slate-800 mb-3">-- cm</p>
+                    <div id="judgment-badge" class="inline-block px-6 py-1.5 rounded-full font-bold text-sm bg-slate-100 text-slate-400 border border-slate-200">
+                        未判定
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- 状態管理 (State) ---
+        const state = {
+            rodPos: 0.0,      // 移動桿の位置 (-10.0cm 〜 +10.0cm)。+が手前、-が奥
+            direction: 1,     // 1: 手前へ移動, -1: 奥へ移動
+            speed: 5.0,       // 移動速度 (cm/s)。標準5.0、切替で2.5
+            isRunning: true,  // アニメーション実行中フラグ
+            trials: [],       // 各回の誤差(cm)を格納する配列
+            lastTime: 0,      // 前回フレームの時間
+            baseDist: 250.0,  // 基準距離 (2.5m = 250cm)
+            maxOffset: 10.0   // 前後移動範囲 (±10cm)
+        };
+
+        // --- DOM要素 ---
+        const canvas = document.getElementById('frontCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        const stopBtn = document.getElementById('stop-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const toggleSpeedBtn = document.getElementById('toggle-speed-btn');
+        
+        const speedDisplay = document.getElementById('speed-display');
+        const speedBadge = document.getElementById('speed-badge');
+        const trialBadge = document.getElementById('trial-badge');
+        const judgmentBadge = document.getElementById('judgment-badge');
+        
+        const val1 = document.getElementById('val-1');
+        const val2 = document.getElementById('val-2');
+        const val3 = document.getElementById('val-3');
+        const valAvg = document.getElementById('val-avg');
+
+        let animationFrameId = null;
+
+        // --- 初期化 ---
+        function init() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            stopBtn.addEventListener('click', handleStop);
+            resetBtn.addEventListener('click', resetAll);
+            toggleSpeedBtn.addEventListener('click', toggleSpeed);
+
+            // キーボード操作（スペース・エンター）
+            window.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' || e.code === 'Enter') {
+                    if (document.activeElement.tagName === 'BUTTON') return;
+                    e.preventDefault();
+                    handleStop();
+                }
+            });
+
+            updateUI();
+            
+            // アニメーションループ開始
+            state.lastTime = performance.now();
+            requestAnimationFrame(animate);
+        }
+
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            
+            // 停止中でもリサイズ対応で描画
+            drawFrontView(); 
+        }
+
+        // --- ロジック ---
+        function toggleSpeed() {
+            if (state.speed === 5.0) {
+                state.speed = 2.5;
+                speedDisplay.textContent = '速度: 2.5 cm/s';
+                toggleSpeedBtn.textContent = '速度変更 (5.0cm/s)';
+            } else {
+                state.speed = 5.0;
+                speedDisplay.textContent = '速度: 5.0 cm/s';
+                toggleSpeedBtn.textContent = '速度変更 (2.5cm/s)';
+            }
+        }
+
+        function handleStop() {
+            if (state.trials.length >= 3) return; 
+
+            if (state.isRunning) {
+                // 停止処理
+                state.isRunning = false;
+                const errorCm = Math.abs(state.rodPos);
+                state.trials.push(errorCm);
+                speedBadge.classList.remove('animate-pulse');
+                speedBadge.classList.replace('bg-blue-500', 'bg-slate-400');
+                
+                if (state.trials.length < 3) {
+                    stopBtn.innerHTML = `
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <span>次へ (${state.trials.length + 1}回目)</span>`;
+                    stopBtn.className = "w-full h-16 bg-slate-700 hover:bg-slate-800 text-white font-bold rounded-xl shadow-md transition-all transform active:scale-95 text-xl flex justify-center items-center gap-2 tracking-wider";
+                } else {
+                    stopBtn.innerHTML = `<span>測定完了</span>`;
+                    stopBtn.className = "w-full h-16 bg-slate-200 text-slate-500 font-bold rounded-xl cursor-not-allowed text-xl flex justify-center items-center tracking-wider";
+                    stopBtn.disabled = true;
+                }
+            } else {
+                // 再開処理
+                if (state.trials.length < 3) {
+                    // 端から再スタートさせて難易度を担保
+                    state.rodPos = (Math.random() > 0.5 ? 1 : -1) * (state.maxOffset - 0.1); 
+                    state.direction = state.rodPos > 0 ? -1 : 1;
+                    
+                    state.isRunning = true;
+                    state.lastTime = performance.now();
+                    speedBadge.classList.add('animate-pulse');
+                    speedBadge.classList.replace('bg-slate-400', 'bg-blue-500');
+                    
+                    stopBtn.innerHTML = `
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                        <span>ストップ（測定）</span>`;
+                    stopBtn.className = "w-full h-16 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl shadow-md transition-all transform active:scale-95 text-xl flex justify-center items-center gap-2 tracking-wider";
+                }
+            }
+            updateUI();
+            drawFrontView(); // 状態変更後に即時描画
+        }
+
+        function resetAll() {
+            state.rodPos = 0.0;
+            state.direction = 1;
+            state.isRunning = true;
+            state.trials = [];
+            state.lastTime = performance.now();
+            
+            speedBadge.classList.add('animate-pulse');
+            speedBadge.classList.replace('bg-slate-400', 'bg-blue-500');
+
+            stopBtn.disabled = false;
+            stopBtn.innerHTML = `
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"></path></svg>
+                <span>ストップ（測定）</span>`;
+            stopBtn.className = "w-full h-16 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-bold rounded-xl shadow-md transition-all transform active:scale-95 text-xl flex justify-center items-center gap-2 tracking-wider";
+            
+            updateUI();
+        }
+
+        function updateUI() {
+            if (state.trials.length < 3) {
+                if(state.isRunning) {
+                    trialBadge.textContent = `${state.trials.length + 1} / 3 回目測定中`;
+                    trialBadge.className = "text-sm font-bold bg-blue-100 text-blue-700 px-4 py-2 rounded-full border border-blue-200 animate-pulse";
+                } else {
+                    trialBadge.textContent = `${state.trials.length}回完了 (待機)`;
+                    trialBadge.className = "text-sm font-bold bg-slate-100 text-slate-600 px-4 py-2 rounded-full border border-slate-200";
+                }
+            } else {
+                trialBadge.textContent = "測定完了";
+                trialBadge.className = "text-sm font-bold bg-green-100 text-green-700 px-4 py-2 rounded-full border border-green-200";
+            }
+
+            // 誤差表示
+            val1.textContent = state.trials[0] !== undefined ? `${state.trials[0].toFixed(1)} cm` : '-- cm';
+            val2.textContent = state.trials[1] !== undefined ? `${state.trials[1].toFixed(1)} cm` : '-- cm';
+            val3.textContent = state.trials[2] !== undefined ? `${state.trials[2].toFixed(1)} cm` : '-- cm';
+
+            // 平均と判定
+            if (state.trials.length === 3) {
+                const sum = state.trials.reduce((a, b) => a + b, 0);
+                const avg = sum / 3.0;
+                valAvg.textContent = `${avg.toFixed(2)} cm`;
+                
+                // 平均誤差 2.0cm以下で合格
+                if (avg <= 2.0) {
+                    judgmentBadge.textContent = "合 格";
+                    judgmentBadge.className = "inline-block px-8 py-2 rounded-full font-bold text-base bg-green-100 text-green-700 border-2 border-green-400 shadow-sm";
+                } else {
+                    judgmentBadge.textContent = "不合格";
+                    judgmentBadge.className = "inline-block px-8 py-2 rounded-full font-bold text-base bg-red-100 text-red-700 border-2 border-red-400 shadow-sm";
+                }
+            } else {
+                valAvg.textContent = '-- cm';
+                judgmentBadge.textContent = "未判定";
+                judgmentBadge.className = "inline-block px-6 py-1.5 rounded-full font-bold text-sm bg-slate-100 text-slate-400 border border-slate-200";
+            }
+        }
+
+        // --- 描画 (Canvas) ---
+        function drawFrontView() {
+            const w = canvas.parentElement.clientWidth;
+            const h = canvas.parentElement.clientHeight;
+            
+            // 筐体の背景（暗い色）
+            ctx.fillStyle = '#1e293b'; 
+            ctx.fillRect(0, 0, w, h);
+
+            // 覗き窓（明るいスリット）
+            // 幅を多めに取り、覗き込んでいる感を演出
+            const slitW = Math.min(w * 0.85, 380); 
+            const slitH = Math.min(h * 0.45, 140); 
+            const slitX = (w - slitW) / 2;
+            const slitY = (h - slitH) / 2;
+
+            // スリット内部
+            ctx.fillStyle = '#f8fafc'; 
+            ctx.fillRect(slitX, slitY, slitW, slitH);
+
+            // スリットの影・枠
+            ctx.strokeStyle = '#0f172a'; 
+            ctx.lineWidth = 4;
+            ctx.strokeRect(slitX, slitY, slitW, slitH);
+            
+            // 奥行きを出すためのインナーシャドウ風ライン
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(slitX + 2, slitY + 2, slitW - 4, slitH - 4);
+
+            // 基準スケール算出：
+            // スリット幅(slitW)を現実の視野約「12cm」分と仮定し、ピクセル/cmを算出
+            const pxPerCm = slitW / 12.0; 
+            
+            // 桿の間隔(3.0cm)と太さ(0.3cm)の厳密適用
+            const gapPx = 3.0 * pxPerCm; 
+            const baseRodW = 0.3 * pxPerCm; 
+            
+            const rodH = slitH * 0.75; // 窓に対する高さ
+            const rodY = slitY + (slitH - rodH) / 2;
+            const centerX = w / 2;
+
+            // 棒の色（ダークグレー）
+            const rodColor = '#111827'; 
+            ctx.fillStyle = rodColor;
+            
+            // 左の棒 (固定)
+            ctx.fillRect(centerX - gapPx - baseRodW/2, rodY, baseRodW, rodH);
+
+            // 右の棒 (固定)
+            ctx.fillRect(centerX + gapPx - baseRodW/2, rodY, baseRodW, rodH);
+
+            // 移動桿 (中央)
+            // 2D画面（単眼視）で前後の動きを視覚的にはっきりさせるため、
+            // 実際の厳密な計算ではなく、スケール変化を劇的に誇張する
+            const scale = Math.max(0.1, 1 + (state.rodPos * 0.03));
+            
+            const scaledW = baseRodW * scale;
+            const scaledH = rodH * scale; 
+            const scaledY = slitY + (slitH - scaledH) / 2;
+
+            ctx.fillRect(centerX - scaledW/2, scaledY, scaledW, scaledH);
+        }
+
+        // --- メインループ ---
+        function animate(currentTime) {
+            // 初回実行時の処理
+            if (!state.lastTime) state.lastTime = currentTime;
+
+            // 経過時間 (dt) の計算。最大0.05秒に制限してカクつき・ワープを防止
+            const dt = Math.min(0.05, (currentTime - state.lastTime) / 1000.0);
+            state.lastTime = currentTime;
+
+            if (state.isRunning) {
+                // 位置の更新
+                state.rodPos += state.direction * state.speed * dt;
+
+                // 範囲チェック (±10cmで折り返し)
+                if (state.rodPos >= state.maxOffset) {
+                    state.rodPos = state.maxOffset;
+                    state.direction = -1;
+                } else if (state.rodPos <= -state.maxOffset) {
+                    state.rodPos = -state.maxOffset;
+                    state.direction = 1;
+                }
+            }
+            
+            // 常に描画を更新し続ける（リサイズ等の即時反映も兼ねる）
+            drawFrontView();
+
+            // 次のフレームを要求（ループを絶対に止めない）
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // 起動処理
+        window.onload = init;
+
+    </script>
+</body>
+</html>
